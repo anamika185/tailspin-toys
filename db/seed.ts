@@ -73,7 +73,8 @@ export async function seedDatabase(db: Database, csvPath: string = join(here, 'g
 }
 
 // Allow running directly: `tsx db/seed.ts`
-if (import.meta.url === `file://${process.argv[1]}`) {
+const selfPath = fileURLToPath(import.meta.url);
+if (selfPath === process.argv[1]) {
     const db = createDatabase();
     seedDatabase(db)
         .then(() => {
