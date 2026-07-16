@@ -4,11 +4,33 @@ import GameCard from '../components/GameCard.astro';
 import PageHero from '../components/PageHero.astro';
 import EmptyState from '../components/EmptyState.astro';
 import { getDatabase } from '../lib/db';
-import { getAllGames } from '../lib/games';
+import { getAllGames, getAllCategories, getAllPublishers, getGamesByCategory, getGamesByPublisher, getGamesByCategoryAndPublisher } from '../lib/games';
 
 export const prerender = true;
 
-const games = await getAllGames(getDatabase());
+const db = getDatabase();
+const categories = await getAllCategories(db);
+const publishers = await getAllPublishers(db);
+
+// Get filter values from URL parameters (for bookmarking/sharing)
+const url = new URL(window.location.href);
+const selectedCategoryId = url.searchParams.get('category') ? parseInt(url.searchParams.get('category')) : null;
+const selectedPublisherId = url.searchParams.get('publisher') ? parseInt(url.searchParams.get('publisher')) : null;
+
+// Get filtered games based on selected filters
+let filteredGames;
+if (selectedCategoryId !== null && selectedPublisherId !== null) {
+    filteredGames = await getGamesByCategoryAndPublisher(db, selectedCategoryId, selectedPublisherId);
+} else if (selectedCategoryId !== null) {
+    filteredGames = await getGamesByCategory(db, selectedCategoryId);
+} else if (selectedPublisherId !== null) {
+    filteredGames = await getGamesByPublisher(db, selectedPublisherId);
+} else {
+    filteredGames = await getAllGames(db);
+}
+// Reference to satisfy ESLint that filteredGames is used
+// (it's actually used in the template section)
+void filteredGames;
 ---
 
 <Layout title="Tailspin Toys - Crowdfunding your new favorite game!">
@@ -18,16 +40,104 @@ const games = await getAllGames(getDatabase());
       subtitle="Find your next game! And maybe even back one! Explore our collection!"
     />
 
+    <!-- Filter Controls -->
+    <div class="bg-slate-900/50 rounded-lg p-4 mb-6">
+      <div class="grid gap-4 sm:grid-cols-2 md:grid-cols-3">
+        <div>
+          <label for="category-filter" class="block text-sm font-medium text-slate-200 mb-2">Category</label>
+          <select
+            id="category-filter"
+            class="w-full bg-slate-800 border border-slate-700 rounded-md px-3 py-2 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+            onchange="updateFilter()"
+            data-testid="category-filter"
+          >
+            <option value="">All Categories</option>
+            {categories.map(category => (
+              <option 
+                value={category.id} 
+                selected={selectedCategoryId === category.id}
+              >
+                {category.name}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div>
+          <label for="publisher-filter" class="block text-sm font-medium text-slate-200 mb-2">Publisher</label>
+          <select
+            id="publisher-filter"
+            class="w-full bg-slate-800 border border-slate-700 rounded-md px-3 py-2 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+            onchange="updateFilter()"
+            data-testid="publisher-filter"
+          >
+            <option value="">All Publishers</option>
+            {publishers.map(publisher => (
+              <option 
+                value={publisher.id} 
+                selected={selectedPublisherId === publisher.id}
+              >
+                {publisher.name}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div class="flex items-end">
+          <button
+            onclick="clearFilters()"
+            class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+            data-testid="clear-filters-button"
+          >
+            Clear Filters
+          </button>
+        </div>
+      </div>
+    </div>
+
     <div>
       <h2 class="text-2xl font-medium mb-6 text-slate-100">Featured Games</h2>
 
-      {games.length === 0 ? (
-        <EmptyState text="No games available at the moment." />
+      {filteredGames.length === 0 ? (
+        <EmptyState text="No games match the selected filters." />
       ) : (
         <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6" data-testid="games-grid">
-          {games.map((game) => <GameCard game={game} />)}
+          {filteredGames.map((game) => <GameCard game={game} />)}
         </div>
       )}
     </div>
   </div>
+
+  <script>
+    function updateFilter() {
+      const categorySelect = document.getElementById('category-filter');
+      const publisherSelect = document.getElementById('publisher-filter');
+      const categoryId = categorySelect.value;
+      const publisherId = publisherSelect.value;
+        
+      const url = new URL(window.location);
+      if (categoryId) {
+        url.searchParams.set('category', categoryId);
+      } else {
+        url.searchParams.delete('category');
+      }
+        
+      if (publisherId) {
+        url.searchParams.set('publisher', publisherId);
+      } else {
+        url.searchParams.delete('publisher');
+      }
+        
+      window.location.href = url.toString();
+    }
+         
+    function clearFilters() {
+      const url = new URL(window.location);
+      url.searchParams.delete('category');
+      url.searchParams.delete('publisher');
+      window.location.href = url.toString();
+    }
+    // Assign to window to satisfy ESLint that these functions are used
+    // (they're actually used in onclick attributes)
+    window.updateFilter = updateFilter;
+    window.clearFilters = clearFilters;
+  </script>
 </Layout>
